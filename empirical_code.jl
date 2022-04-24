@@ -102,6 +102,12 @@ function cutoffs_analytical() ##for akk the index k, need to add 1
     return xi_star_matrix
 end
 
+xi_star_matrix=cutoffs_analytical()
+
+xi_matrix = reshape(rand(Normal(0, σ_ξ), N*T_data*M), N,T_data,M)
+
+t1,t2=getendo_new(xi_star_matrix, xi_matrix)
+
 
 function getendo_new(xi_star_matrix, xi_matrix) ##this generates endogenous x and k
     k_vector=zeros(N,T_data,M)
@@ -172,24 +178,27 @@ function simulate_data(lfp_vector,k_vector,wages_vector,df_for_calib) ##create f
 end
 
 
-##Parameters 
+##Parameters
 
 N=1506
-M=2 ##S is number of simulations
+M=1 ##S is number of simulations
 #set initial parameters
 ##sigma eta is randomly set (=rho), b is randomly set, the rest is using results from Wholpin paper
-α_1=-1375
+α_1=-10
 α_2=-0.047
 α_3=-11.5
-α_4=-95.6
+α_4=-5
 b=0.1
-β_1=-0.280
-β_2=0.024
+
+β_1=6.3
+β_2=0.01
 β_3=-0.0002
-β_4=0.050
+β_4=0.07
 σ_ξ=0.194
 
+xi_star_matrix=cutoffs_analytical()
 
+xi_star_matrix[1,:,:]
 
 function get_moments_difference()
     Random.seed!(1234);
@@ -208,12 +217,13 @@ function get_moments_difference()
     wages_by_age_diff=zeros(10,M)
     transition_diff=zeros(2,2,M)
 
-    
+
     df_for_calib=filter(row -> row.age<=54 && row.id<=N, df)  #data stuff that doesn't depend on simulation
     df_data_educ_under_12=filter(row -> row.educ<=11, df_for_calib)
     df_data_educ_12=filter(row -> row.educ==12, df_for_calib)
-    df_data_educ_13_15=filter(row -> row.educ<=15,df_for_calib)
+    df_data_educ_13_15=filter(row -> 13<=row.educ<=15,df_for_calib)
     df_data_educ_16_plus=filter(row -> row.educ>=16, df_for_calib)
+
     df_data_exp_10_or_less=filter(row -> row.x<=10, df_for_calib)
     df_data_exp_11_to_20=filter(row -> 11<=row.x<=20, df_for_calib)
     df_data_exp_21_plus=filter(row -> row.x >= 21,  df_for_calib)
@@ -245,22 +255,26 @@ function get_moments_difference()
         sim_data_working_educ_13_15=filter(row -> 13 <= row.educ <= 15,  sim_data_working)
         sim_data_working_educ_16_plus=filter(row -> row.educ>=16,  sim_data_working)
 
+        participation_by_age=working_by_age(df_for_calib)
+        sim_participation_by_age=working_by_age(sim_data)
+
         working_by_educ_diff[1,m]=mean(df_for_calib.lfp)-mean(sim_data.lfp)
         working_by_educ_diff[2,m]=mean(df_data_educ_under_12.lfp)-mean(sim_data_educ_under_12.lfp)
         working_by_educ_diff[3,m]=mean(df_data_educ_12.lfp)-mean(sim_data_educ_12.lfp)
         working_by_educ_diff[4,m]=mean(df_data_educ_13_15.lfp)- mean(sim_data_educ_13_15.lfp)
-        working_by_educ_diff[5,m]=mean(df_data_working_educ_16_plus.lfp)-mean(sim_data_educ_16_plus.lfp)
-
-        participation_by_age=working_by_age(df_for_calib)
-        sim_participation_by_age=working_by_age(sim_data)
+        working_by_educ_diff[5,m]=mean(df_data_educ_16_plus.lfp)-mean(sim_data_educ_16_plus.lfp)
 
         working_by_age_diff[:,m]=participation_by_age.-sim_participation_by_age
 
-        working_by_experience_diff[:,m]=[mean(df_data_exp_10_or_less.lfp)-mean(sim_data_exp_10_or_less.lfp) mean(df_data_working_exp_11_to_20.lfp)- mean(sim_data_exp_11_to_20.lfp) mean(df_data_working_exp_21_plus.lfp)- mean(sim_data_exp_21_plus.lfp)
+        working_by_experience_diff[:,m]=[mean(df_data_exp_10_or_less.lfp)-mean(sim_data_exp_10_or_less.lfp) mean(df_data_exp_11_to_20.lfp)- mean(sim_data_exp_11_to_20.lfp) mean(df_data_exp_21_plus.lfp)- mean(sim_data_exp_21_plus.lfp)
         ]
 
+        wages_by_educ_diff[1,m]=mean(df_data_working.wage)-mean(sim_data_working.wage)
+        wages_by_educ_diff[2,m]=mean(df_data_working_educ_under_12.wage)-mean(sim_data_working_educ_under_12.wage)
+        wages_by_educ_diff[3,m]=mean(df_data_working_educ_12.wage)- mean(sim_data_working_educ_12.wage)
+        wages_by_educ_diff[4,m]= mean(df_data_working_educ_13_15.wage)- mean(sim_data_working_educ_13_15.wage)
+        wages_by_educ_diff[5,m]=mean(df_data_working_educ_16_plus.wage)-mean(sim_data_working_educ_16_plus.wage)
 
-        wages_by_educ_diff[:,m]=[mean(df_data_working.wage)-mean(sim_data_working.wage) mean(df_data_working_educ_under_12.lfp)-mean(sim_data_working_educ_under_12.lfp) mean(df_data_working_educ_12.lfp)- mean(sim_data_working_educ_12.lfp) mean(df_data_working_educ_13_15.lfp)- mean(sim_data_working_educ_13_15.lfp) mean(df_data_working_educ_16_plus.lfp)-mean(sim_data_working_educ_16_plus.lfp)]
         wages_age=wages_by_age(df_data_working)
         sim_wages_age=wages_by_age(sim_data_working)
         wages_by_age_diff[:,m]=wages_age.-sim_wages_age
@@ -278,10 +292,11 @@ function get_moments_difference()
         wages_by_age_diff_mean=mean(wages_by_age_diff,dims=2)
         transition_diff_mean=mean(transition_diff,dims=3)
 
-        return working_by_educ_diff_mean, working_by_age_diff_mean, working_by_experience_diff_mean, wages_by_educ_diff_mean, wages_by_age_diff_mean, transition_diff_mean
+        return -working_by_educ_diff_mean, -working_by_age_diff_mean, -working_by_experience_diff_mean, -wages_by_educ_diff_mean, -wages_by_age_diff_mean, -transition_diff_mean
 end
 
-
-
 @elapsed m1,m2,m3,m4,m5,m6 =get_moments_difference()
+@show m1,m2,m3,m4,m5,m6
+
+
 
