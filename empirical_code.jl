@@ -180,25 +180,25 @@ end
 
 ##Parameters
 
-N=1506
+N=100
 M=1 ##S is number of simulations
 #set initial parameters
 ##sigma eta is randomly set (=rho), b is randomly set, the rest is using results from Wholpin paper
-α_1=-10
+α_1=-1
 α_2=-0.047
 α_3=-11.5
 α_4=-5
 b=0.1
 
-β_1=6.3
+β_1=5.3
 β_2=0.01
 β_3=-0.0002
 β_4=0.07
-σ_ξ=0.194
+σ_ξ=1
 
 xi_star_matrix=cutoffs_analytical()
-
-xi_star_matrix[1,:,:]
+xi_star_matrix
+xi_star_matrix[1,13:32,10]
 
 function get_moments_difference()
     Random.seed!(1234);
@@ -207,7 +207,7 @@ function get_moments_difference()
     lfp_vector, k_vector = getendo_new(xi_star_matrix, xi_matrix)
     df_for_calib=filter(row -> row.age<=54 && row.id<=N, df)
     educ=reshape(df_for_calib.educ, N,T_data)
-    wages_vector = exp.(β_1.+ β_2.*k_vector.+ β_3.*k_vector.^2 .+ xi_matrix.+ educ) ##need to check this, this generates wages
+    wages_vector = exp.(β_1.+ β_2.*k_vector.+ β_3.*k_vector.^2 .+ xi_matrix.+ educ*β_4) ##need to check this, this generates wages
     sim_data_all=simulate_data(lfp_vector,k_vector,wages_vector,df_for_calib)
 
     working_by_educ_diff=zeros(5,M)
@@ -297,6 +297,8 @@ end
 
 @elapsed m1,m2,m3,m4,m5,m6 =get_moments_difference()
 @show m1,m2,m3,m4,m5,m6
+
+
 
 
 
