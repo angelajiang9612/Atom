@@ -7,19 +7,14 @@ using DataStructures
 using Distributions
 using DelimitedFiles
 using Random
+
 cd("/Users/bubbles/Desktop/751 Labor/751 Chao/Empirical Project")
 data=readdlm("data_age4554.txt")
 df = DataFrames.DataFrame(data, :auto)
 df = df[2:30121,:]
 df=rename!(df,[:id,:age,:lfp,:x,:wage,:educ,:lfp0,:hinc])
 
-K=45 ##the maximum first period experience level, which is 24, +20, K is length so add 1
-k_grid=Int.(collect(range(0, stop = 44, length = K)))
-K_max=K-1
-A_final=64 ##A for terminating period
-A_init=45
-T_data=10 ##data periods
-δ=0.95
+#parameters that do not change 
 
 function working_by_age(df_data)
     participation_by_age=zeros(10)
@@ -64,12 +59,6 @@ function L_estimate(df,l) #this function calculates the destination firm types f
     return counter_0, counter_1
 end
 
-transite_00, transite_01 =L_estimate(df_data,0) ##people in this data seem to always work or always not work
-transite_10, transite_11 =L_estimate(df_data,1)
-
-
-Transition_Matrix=[transite_00/(transite_00 +transite_01) transite_01/(transite_00 +transite_01); transite_10/(transite_10+transite_11) transite_11/(transite_10+transite_11)]
-
 
 
 function cutoffs_analytical() ##for akk the index k, need to add 1
@@ -84,17 +73,16 @@ function cutoffs_analytical() ##for akk the index k, need to add 1
             if t==T_data #for last period
                 for k=0:K_max #last period possible experience 0 to k_max, k is experience
                     xi_star=log(-α_1 - α_2*y + b*(1+α_2) - α_3*k -α_4*s) - (β_1 + β_2*k + β_3*k^2 + β_4*s) - log(1 +α_2) #xi_star us calculated for any state variable k experience in the last year
-                    X_A= exp(β_1 + β_2*k + β_3*k^2 + β_4*s)
                     xi_star_matrix[i,k+1,t]=xi_star #to save need to add one to k to get index starting from. Saving e*(k) for all possible k
-                    E_MAX[i,k+1,t]=y*(1-cdf.(Normal(),xi_star/σ_ξ)) + X_A*exp(0.5*σ_ξ^2)*(1-cdf.(Normal(),(xi_star-σ_ξ^2)/σ_ξ)) + ((1+α_2)*y + α_1)*cdf.(Normal(),xi_star/σ_ξ) #E_T, for use in T-1
+                    X_A= exp(β_1 + β_2*k + β_3*k^2 + β_4*s)
+                    E_MAX[i,k+1,t]=(α_1 + (1+α_2)*(y-b) + α_3*k + α_4*s)*(1-cdf.(Normal(),xi_star/σ_ξ)) + (1+α_2)*X_A*exp(0.5*σ_ξ^2)*(1-cdf.(Normal(),(xi_star-σ_ξ^2)/σ_ξ)) + y*cdf.(Normal(),xi_star/σ_ξ) 
                 end
             elseif t<=T_data-1
                 for k=0:K_max-(T_data-t)
                     xi_star=log((-α_1 - α_2*y + b*(1+α_2) - α_3*k -α_4*s) + δ*(E_MAX[i,k+1,t+1]-E_MAX[i,k+1+1,t+1])) - (β_1 + β_2*k + β_3*k^2 + β_4*s) - log(1+α_2) #T-1 period cutoff only depends on expected for T period
-                    X_A= exp(β_1 + β_2*k + β_3*k^2 + β_4*s)
-                    E_MAX[i,k+1,t]=(y + δ*E_MAX[i,k+1+1,t+1])*(1-cdf.(Normal(),xi_star/σ_ξ)) + X_A*exp(0.5*σ_ξ^2)*(1-cdf.(Normal(),(xi_star-σ_ξ^2)/σ_ξ)) +
-                    ((1+α_2)*y + α_1 + E_MAX[i,k+1,t+1])*cdf.(Normal(),xi_star/σ_ξ) #this E_mAx now has uncertainty in both work and not work world.
                     xi_star_matrix[i,k+1,t]=xi_star
+                    X_A= exp(β_1 + β_2*k + β_3*k^2 + β_4*s)
+                    E_MAX[i,k+1,t]=(α_1 + (1+α_2)*(y-b) + α_3*k + α_4*s + E_MAX[i,k+1+1,t+1])*(1-cdf.(Normal(),xi_star/σ_ξ)) + (1+α_2)*X_A*exp(0.5*σ_ξ^2)*(1-cdf.(Normal(),(xi_star-σ_ξ^2)/σ_ξ)) + (y + E_MAX[i,k+1+1,t+1])*cdf.(Normal(),xi_star/σ_ξ) 
                 end
             end
         end
@@ -102,11 +90,6 @@ function cutoffs_analytical() ##for akk the index k, need to add 1
     return xi_star_matrix
 end
 
-xi_star_matrix=cutoffs_analytical()
-
-xi_matrix = reshape(rand(Normal(0, σ_ξ), N*T_data*M), N,T_data,M)
-
-t1,t2=getendo_new(xi_star_matrix, xi_matrix)
 
 
 function getendo_new(xi_star_matrix, xi_matrix) ##this generates endogenous x and k
@@ -154,7 +137,6 @@ function getendo_new(xi_star_matrix, xi_matrix) ##this generates endogenous x an
     return x, k_vector
 end
 
-
 function simulate_data(lfp_vector,k_vector,wages_vector,df_for_calib) ##create function to store all sim_data
     s_id=zeros(N*T_data)
     s_age=zeros(N*T_data)
@@ -177,28 +159,38 @@ function simulate_data(lfp_vector,k_vector,wages_vector,df_for_calib) ##create f
     return sim_data
 end
 
-
 ##Parameters
+
+#those that do not change 
+
+K=45 ##the maximum first period experience level, which is 24, +20, K is length so add 1
+k_grid=Int.(collect(range(0, stop = 44, length = K)))
+K_max=K-1
+A_final=64 ##A for terminating period
+A_init=45
+T_data=10 ##data periods
+δ=0.95
+
 
 N=100
 M=1 ##S is number of simulations
 #set initial parameters
 ##sigma eta is randomly set (=rho), b is randomly set, the rest is using results from Wholpin paper
-α_1=-1
-α_2=-0.047
-α_3=-11.5
-α_4=-5
-b=0.1
+α_1=-13000
+α_2=-0.25
+α_3=-200
+α_4=-300
+b=700
 
-β_1=5.3
+β_1=7.8
 β_2=0.01
 β_3=-0.0002
-β_4=0.07
-σ_ξ=1
+β_4=0.215
+σ_ξ=0.194
 
 xi_star_matrix=cutoffs_analytical()
-xi_star_matrix
-xi_star_matrix[1,13:32,10]
+
+xi_star_matrix[1,1:23,10]
 
 function get_moments_difference()
     Random.seed!(1234);
@@ -207,7 +199,7 @@ function get_moments_difference()
     lfp_vector, k_vector = getendo_new(xi_star_matrix, xi_matrix)
     df_for_calib=filter(row -> row.age<=54 && row.id<=N, df)
     educ=reshape(df_for_calib.educ, N,T_data)
-    wages_vector = exp.(β_1.+ β_2.*k_vector.+ β_3.*k_vector.^2 .+ xi_matrix.+ educ*β_4) ##need to check this, this generates wages
+    wages_vector = exp.(β_1.+ β_2.*k_vector.+ β_3.*k_vector.^2 .+ xi_matrix.+ educ*β_4)
     sim_data_all=simulate_data(lfp_vector,k_vector,wages_vector,df_for_calib)
 
     working_by_educ_diff=zeros(5,M)
