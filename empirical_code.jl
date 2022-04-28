@@ -14,7 +14,6 @@ df = DataFrames.DataFrame(data, :auto)
 df = df[2:30121,:]
 df=rename!(df,[:id,:age,:lfp,:x,:wage,:educ,:lfp0,:hinc])
 
-#parameters that do not change
 
 function working_by_age(df_data)
     participation_by_age=zeros(10)
