@@ -14,7 +14,7 @@ df = DataFrames.DataFrame(data, :auto)
 df = df[2:30121,:]
 df=rename!(df,[:id,:age,:lfp,:x,:wage,:educ,:lfp0,:hinc])
 
-#parameters that do not change 
+#parameters that do not change
 
 function working_by_age(df_data)
     participation_by_age=zeros(10)
@@ -75,14 +75,15 @@ function cutoffs_analytical() ##for akk the index k, need to add 1
                     xi_star=log(-α_1 - α_2*y + b*(1+α_2) - α_3*k -α_4*s) - (β_1 + β_2*k + β_3*k^2 + β_4*s) - log(1 +α_2) #xi_star us calculated for any state variable k experience in the last year
                     xi_star_matrix[i,k+1,t]=xi_star #to save need to add one to k to get index starting from. Saving e*(k) for all possible k
                     X_A= exp(β_1 + β_2*k + β_3*k^2 + β_4*s)
-                    E_MAX[i,k+1,t]=(α_1 + (1+α_2)*(y-b) + α_3*k + α_4*s)*(1-cdf.(Normal(),xi_star/σ_ξ)) + (1+α_2)*X_A*exp(0.5*σ_ξ^2)*(1-cdf.(Normal(),(xi_star-σ_ξ^2)/σ_ξ)) + y*cdf.(Normal(),xi_star/σ_ξ) 
+                    E_MAX[i,k+1,t]=(α_1 + (1+α_2)*(y-b) + α_3*k + α_4*s)*(1-cdf.(Normal(),xi_star/σ_ξ)) + (1+α_2)*X_A*exp(0.5*σ_ξ^2)*(1-cdf.(Normal(),(xi_star-σ_ξ^2)/σ_ξ)) + y*cdf.(Normal(),xi_star/σ_ξ)
                 end
             elseif t<=T_data-1
                 for k=0:K_max-(T_data-t)
                     xi_star=log((-α_1 - α_2*y + b*(1+α_2) - α_3*k -α_4*s) + δ*(E_MAX[i,k+1,t+1]-E_MAX[i,k+1+1,t+1])) - (β_1 + β_2*k + β_3*k^2 + β_4*s) - log(1+α_2) #T-1 period cutoff only depends on expected for T period
                     xi_star_matrix[i,k+1,t]=xi_star
                     X_A= exp(β_1 + β_2*k + β_3*k^2 + β_4*s)
-                    E_MAX[i,k+1,t]=(α_1 + (1+α_2)*(y-b) + α_3*k + α_4*s + E_MAX[i,k+1+1,t+1])*(1-cdf.(Normal(),xi_star/σ_ξ)) + (1+α_2)*X_A*exp(0.5*σ_ξ^2)*(1-cdf.(Normal(),(xi_star-σ_ξ^2)/σ_ξ)) + (y + E_MAX[i,k+1+1,t+1])*cdf.(Normal(),xi_star/σ_ξ) 
+                    E_MAX[i,k+1,t]=(α_1 + (1+α_2)*(y-b) + α_3*k + α_4*s + E_MAX[i,k+1+1,t+1])*(1-cdf.(Normal(),xi_star/σ_ξ)) + (1+α_2)*X_A*exp(0.5*σ_ξ^2)*(1-cdf.(Normal(),(xi_star-σ_ξ^2)/σ_ξ))
+                    + (y + E_MAX[i,k+1,t+1])*cdf.(Normal(),xi_star/σ_ξ)
                 end
             end
         end
@@ -161,7 +162,7 @@ end
 
 ##Parameters
 
-#those that do not change 
+#those that do not change
 
 K=45 ##the maximum first period experience level, which is 24, +20, K is length so add 1
 k_grid=Int.(collect(range(0, stop = 44, length = K)))
@@ -289,6 +290,7 @@ end
 
 @elapsed m1,m2,m3,m4,m5,m6 =get_moments_difference()
 @show m1,m2,m3,m4,m5,m6
+
 
 
 
