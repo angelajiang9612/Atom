@@ -1,5 +1,3 @@
-
-using Pkg
 using DataFrames
 using CSV
 using Statistics
@@ -8,12 +6,28 @@ using Distributions
 using DelimitedFiles
 using Random
 
+
+#importing data
+
 cd("/Users/bubbles/Desktop/751 Labor/751 Chao/Empirical Project")
 data=readdlm("data_age4554.txt")
 df = DataFrames.DataFrame(data, :auto)
 df = df[2:30121,:]
 df=rename!(df,[:id,:age,:lfp,:x,:wage,:educ,:lfp0,:hinc])
 
+
+##Parameters that do not change
+
+K=35 ##the maximum first period experience level, which is 24, +10 for now, K is length so add 1. Don't need to go any higher at this point
+k_grid=Int.(collect(range(0, stop = 34, length = K)))
+K_max=K-1
+A_final=64 ##A for terminating period
+A_init=45
+T_data=10 ##data periods
+δ=0.95
+
+
+#The three function below calculate moments from real data/simulated data, they should be fine because we have checked our results
 
 function working_by_age(df_data)
     participation_by_age=zeros(10)
@@ -59,27 +73,38 @@ function L_estimate(df,l) #this function calculates the destination firm types f
 end
 
 
-
-function cutoffs_analytical() ##for akk the index k, need to add 1
+function cutoffs_analytical(xi_matrix) ####This functionmcalculates cutoffs
     E_MAX=zeros(N,K,T_data)
-    xi_star_matrix=zeros(N,K,T_data)  ##place to store cutoffs
+    xi_star_matrix=zeros(N,K,T_data)  ##place to store cutoffs. This function use real data rather than grid so don't need grid for the other state variables
     for i=1:N
         println("this is", i, "person")
-        for t=T_data:-1:1
-            row=Matrix(filter(row -> row.id ==i && row.age==44+t, df))
-            y=row[8]
-            s=row[6]
+        for t=T_data:-1:1 #from backwards
+            row=Matrix(filter(row -> row.id ==i && row.age==44+t, df)) #select i's info in time t. e.g.if T_data is 10, ag =44+10=54, which is the last period in data
+            y=row[8] #the last row is husband's income
+            s=row[6] #the sixth row is education
             if t==T_data #for last period
-                for k=0:K_max #last period possible experience 0 to k_max, k is experience
-                    xi_star=log(-α_1 - α_2*y + b*(1+α_2) - α_3*k -α_4*s) - (β_1 + β_2*k + β_3*k^2 + β_4*s) - log(1 +α_2) #xi_star us calculated for any state variable k experience in the last year
-                    xi_star_matrix[i,k+1,t]=xi_star #to save need to add one to k to get index starting from. Saving e*(k) for all possible k
+                for k=0:K_max #last period possible experience 0 to k_max of 34, k is experience so start from 0
+                    log_inside= -α_1 - α_2*y + b*(1+α_2) - α_3*k -α_4*s #dealing with the domain error problem
+                    if log_inside >= 0
+                        xi_star=log(-α_1 - α_2*y + b*(1+α_2) - α_3*k -α_4*s) - log(1 +α_2)- (β_1 + β_2*k + β_3*k^2 + β_4*s)  #xi_star us calculated for any state variable k experience in the last year
+                        xi_star_matrix[i,k+1,t]=xi_star #to save need to add one to k to get index.
+                    elseif log_inside <0
+                        xi_star=-1000000000000
+                        xi_star_matrix[i,k+1,t]=xi_star
+                    end
                     X_A= exp(β_1 + β_2*k + β_3*k^2 + β_4*s)
                     E_MAX[i,k+1,t]=(α_1 + (1+α_2)*(y-b) + α_3*k + α_4*s)*(1-cdf.(Normal(),xi_star/σ_ξ)) + (1+α_2)*X_A*exp(0.5*σ_ξ^2)*(1-cdf.(Normal(),(xi_star-σ_ξ^2)/σ_ξ)) + y*cdf.(Normal(),xi_star/σ_ξ)
                 end
-            elseif t<=T_data-1
-                for k=0:K_max-(T_data-t)
-                    xi_star=log((-α_1 - α_2*y + b*(1+α_2) - α_3*k -α_4*s) + δ*(E_MAX[i,k+1,t+1]-E_MAX[i,k+1+1,t+1])) - (β_1 + β_2*k + β_3*k^2 + β_4*s) - log(1+α_2) #T-1 period cutoff only depends on expected for T period
-                    xi_star_matrix[i,k+1,t]=xi_star
+            elseif t<=T_data-1 #if not last period
+                for k=0:K_max-(T_data-t) #e.g. if this period is t=6, the max experience possible is 34-(10-6)=30
+                    log_inside = -α_1 - α_2*y + b*(1+α_2) - α_3*k -α_4*s + δ*(E_MAX[i,k+1,t+1]-E_MAX[i,k+2,t+1])
+                    if log_inside >= 0 #dealing with the domain error problem
+                        xi_star=log(-α_1 - α_2*y + b*(1+α_2) - α_3*k -α_4*s + δ*(E_MAX[i,k+1,t+1]-E_MAX[i,k+2,t+1])) - log(1+α_2)-(β_1 + β_2*k + β_3*k^2 + β_4*s)  #T-1 period cutoff only depends on expected for T period
+                        xi_star_matrix[i,k+1,t]=xi_star
+                    elseif log_inside <0
+                        xi_star=-1000000000000
+                        xi_star_matrix[i,k+1,t]=xi_star
+                    end
                     X_A= exp(β_1 + β_2*k + β_3*k^2 + β_4*s)
                     E_MAX[i,k+1,t]=(α_1 + (1+α_2)*(y-b) + α_3*k + α_4*s + E_MAX[i,k+1+1,t+1])*(1-cdf.(Normal(),xi_star/σ_ξ)) + (1+α_2)*X_A*exp(0.5*σ_ξ^2)*(1-cdf.(Normal(),(xi_star-σ_ξ^2)/σ_ξ))
                     + (y + E_MAX[i,k+1,t+1])*cdf.(Normal(),xi_star/σ_ξ)
@@ -91,29 +116,28 @@ function cutoffs_analytical() ##for akk the index k, need to add 1
 end
 
 
-
-function getendo_new(xi_star_matrix, xi_matrix) ##this generates endogenous x and k
-    k_vector=zeros(N,T_data,M)
-    x=zeros(N,T_data,M)
+function getendo_new(xi_star_matrix, xi_matrix) ##this generates endogenous x and k for each simulation using initial experience
+    k_vector=zeros(N,T_data,M) #experience of each person at each period in each simulation
+    x=zeros(N,T_data,M) #action of each person at each period in each simulation
     for m=1:M
         for i=1:N
             println("this is", i, "person")
-            row=Matrix(filter(row -> row.id ==i && row.age==45, df))
+            row=Matrix(filter(row -> row.id ==i && row.age==45, df)) #only need the starting experience
             for t=1:T_data
-                xi=xi_matrix[i,t,m]
+                xi=xi_matrix[i,t,m] #get shock from shock matrix
                 if t==1
-                    k_vector[i,t,m]=row[4]
-                    k= row[4]
-                    xi_cutoff=xi_star_matrix[i,k+1,t]
+                    k=row[4]
+                    k_vector[i,t,m]=k #experience is 4th column, need to make sure this is an integer
+                    xi_cutoff=xi_star_matrix[i,k+1,t] #add 1 for matrix indice
                     if xi >= xi_cutoff
-                        k_vector[i,t+1,m]=k+1 #update experience next period
                         x[i,t,m]=1 #t
+                        k_vector[i,t+1,m]=k+1 #update experience next period
                     elseif xi < xi_cutoff
                         k_vector[i,t+1,m]=k
                         x[i,t,m]=0
                     end
                 elseif 1<t<T_data
-                    k= floor(Int,k_vector[i,t,m])
+                    k=floor(Int,k_vector[i,t,m]) ##I don't know why I need to convert as interger again but if I don't do it I get error.
                     xi_cutoff=xi_star_matrix[i,k+1,t]
                     if xi >= xi_cutoff
                         k_vector[i,t+1,m]=k+1 #update experience next period
@@ -123,7 +147,7 @@ function getendo_new(xi_star_matrix, xi_matrix) ##this generates endogenous x an
                         x[i,t,m]=0
                     end
                 else t==T_data #do not need to update next period.
-                    k= floor(Int,k_vector[i,t,m])
+                    k=floor(Int,k_vector[i,t,m])
                     xi_cutoff=xi_star_matrix[i,k+1,t]
                     if xi >= xi_cutoff
                         x[i,t,m]=1 #this period participation is 1
@@ -137,120 +161,114 @@ function getendo_new(xi_star_matrix, xi_matrix) ##this generates endogenous x an
     return x, k_vector
 end
 
-function simulate_data(lfp_vector,k_vector,wages_vector,df_for_calib) ##create function to store all sim_data
-    s_id=zeros(N*T_data)
+
+
+function simulate_data(lfp_vector,k_vector,wages_vector,df_for_calib) ##create function to store all simulated data in a datafram similar to the real data
+    s_id=zeros(N*T_data) #create vectors store information, the number of rows is N times time period
     s_age=zeros(N*T_data)
     s_lfp=zeros(N*T_data)
     s_x=zeros(N*T_data)
     s_wages=zeros(N*T_data)
     s_educ=zeros(N*T_data)
-    sim_data=zeros(N*T_data,6,M)
-
+    sim_data=zeros(N*T_data,6,M) ##to store the six things we care about, no initial labor or husband's wage
     for m=1:M
-        s_id=df_for_calib.id
+        s_id=df_for_calib.id #s_id is just id information from the df
         s_age=df_for_calib.age
-        s_lfp=vec(lfp_vector[:,:,m]') #need ' to go by row
+        s_lfp=vec(lfp_vector[:,:,m]') #need ' to go by id first go through all t
         s_x=vec(k_vector[:,:,m]')
         s_wages=vec(wages_vector[:,:,m]')
         s_educ=df_for_calib.educ
-        sim=DataFrames.DataFrame(hcat(s_id, s_age,s_lfp, s_x,s_wages,s_educ), :auto)
-        sim_data[:,:,m].=rename!(sim,[:id,:age,:lfp,:x,:wage,:educ])
+        sim=DataFrames.DataFrame(hcat(s_id, s_age,s_lfp, s_x,s_wages,s_educ), :auto) #convert to dataframe format
+        sim_data[:,:,m].=rename!(sim,[:id,:age,:lfp,:x,:wage,:educ]) #rename data
     end
     return sim_data
 end
 
-##Parameters
 
-#those that do not change
+################Simulation part#############
 
-K=45 ##the maximum first period experience level, which is 24, +20, K is length so add 1
-k_grid=Int.(collect(range(0, stop = 44, length = K)))
-K_max=K-1
-A_final=64 ##A for terminating period
-A_init=45
-T_data=10 ##data periods
-δ=0.95
-
-
-N=100
+N=1506
 M=1 ##S is number of simulations
 #set initial parameters
 ##sigma eta is randomly set (=rho), b is randomly set, the rest is using results from Wholpin paper
-α_1=-13000
-α_2=-0.25
-α_3=-200
-α_4=-300
-b=700
+α_1=-14500
+α_2=-0.25 #this cannot be less than -1 because we will get domain error
+α_3=-100
+α_4=-200
+b=1000
 
-β_1=7.8
-β_2=0.01
+β_1=9.93
+β_2=0.01 #this term should also be small because wages doesnt change much with age, which means probably won't change much with experience 
 β_3=-0.0002
-β_4=0.215
+β_4=0.035 #this term should be small because wage doesn't change much as education changes 
 σ_ξ=0.194
+
+#higher b1 and lower b4 might be needed for education fit 
+
+@elapsed m1,m2,m3,m4,m5,m6 =get_moments_difference()
+@show m1,m2,m3,m4,m5,m6
+
 
 xi_star_matrix=cutoffs_analytical()
 
-xi_star_matrix[1,1:23,10]
+function get_moments_difference() #this compute moment difference
 
-function get_moments_difference()
-    Random.seed!(1234);
-    xi_matrix = reshape(rand(Normal(0, σ_ξ), N*T_data*M), N,T_data,M)
-    xi_star_matrix= cutoffs_analytical()
-    lfp_vector, k_vector = getendo_new(xi_star_matrix, xi_matrix)
-    df_for_calib=filter(row -> row.age<=54 && row.id<=N, df)
-    educ=reshape(df_for_calib.educ, N,T_data)
-    wages_vector = exp.(β_1.+ β_2.*k_vector.+ β_3.*k_vector.^2 .+ xi_matrix.+ educ*β_4)
-    sim_data_all=simulate_data(lfp_vector,k_vector,wages_vector,df_for_calib)
+    df_for_calib=filter(row -> row.age<=54 && row.id<=N, df)  #real data stuff that doesn't depend on simulation but depend on N
+    df_data_educ_under_12=filter(row -> row.educ<=11, df_for_calib)
+    df_data_educ_12=filter(row -> row.educ==12, df_for_calib)
+    df_data_educ_13_15=filter(row -> 13<=row.educ<=15,df_for_calib)
+    df_data_educ_16_plus=filter(row -> row.educ>=16, df_for_calib)
+    df_data_exp_10_or_less=filter(row -> row.x<=10, df_for_calib)
+    df_data_exp_11_to_20=filter(row -> 11<=row.x<=20, df_for_calib)
+    df_data_exp_21_plus=filter(row -> row.x >= 21,  df_for_calib)
+    df_data_working=filter(row -> row.lfp==1, df_for_calib)
+    df_data_working_educ_under_12=filter(row -> row.educ<=12, df_data_working)
+    df_data_working_educ_12=filter(row -> row.educ==12, df_data_working)
+    df_data_working_educ_13_15=filter(row -> 13 <= row.educ <= 15,  df_data_working)
+    df_data_working_educ_16_plus=filter(row -> row.educ>=16,  df_data_working)
+    transite_00_data, transite_01_data =L_estimate(df_for_calib,0) ##people in this data seem to always work or always not work
+    transite_10_data, transite_11_data =L_estimate(df_for_calib,1)
+    Transition_Matrix=[transite_00_data/(transite_00_data +transite_01_data) transite_01_data/(transite_00_data +transite_01_data); transite_10_data/(transite_10_data+transite_11_data) transite_11_data/(transite_10_data+transite_11_data)]
+#question, do I have to write as function of xi_star etc all the time?
+    Random.seed!(1234); #generating simulated results
+    xi_matrix = reshape(rand(Normal(0, σ_ξ), N*T_data*M), N,T_data,M) #draw shocks
+    xi_star_matrix= cutoffs_analytical(xi_matrix) #compute cutoffs
+    lfp_vector, k_vector = getendo_new(xi_star_matrix, xi_matrix) #this calculates participation and experience
+    df_for_calib=filter(row -> row.age<=54 && row.id<=N, df) #when I try this for small N I need to make sure I subset the real data by small N too
+    educ_change=reshape(df_for_calib.educ,T_data,N) #need to get pick up education to calculate wages
+    educ=educ_change' #do this to get in the right form
+    wages_vector = exp.(β_1.+ β_2.*k_vector.+ β_3.*k_vector.^2 .+  β_4*educ.+xi_matrix)
 
-    working_by_educ_diff=zeros(5,M)
+    sim_data_all=simulate_data(lfp_vector,k_vector,wages_vector,df_for_calib) #convert the results for all the simulations into a datraframe, this is in N*T, 6, m dimension
+
+    working_by_educ_diff=zeros(5,M) ##setting up matrix for storing the moment differences
     working_by_age_diff=zeros(10,M)
     working_by_experience_diff=zeros(3,M)
     wages_by_educ_diff=zeros(5,M)
     wages_by_age_diff=zeros(10,M)
     transition_diff=zeros(2,2,M)
 
-
-    df_for_calib=filter(row -> row.age<=54 && row.id<=N, df)  #data stuff that doesn't depend on simulation
-    df_data_educ_under_12=filter(row -> row.educ<=11, df_for_calib)
-    df_data_educ_12=filter(row -> row.educ==12, df_for_calib)
-    df_data_educ_13_15=filter(row -> 13<=row.educ<=15,df_for_calib)
-    df_data_educ_16_plus=filter(row -> row.educ>=16, df_for_calib)
-
-    df_data_exp_10_or_less=filter(row -> row.x<=10, df_for_calib)
-    df_data_exp_11_to_20=filter(row -> 11<=row.x<=20, df_for_calib)
-    df_data_exp_21_plus=filter(row -> row.x >= 21,  df_for_calib)
-
-    df_data_working=filter(row -> row.lfp==1, df_for_calib)
-    df_data_working_educ_under_12=filter(row -> row.educ<=12, df_data_working)
-    df_data_working_educ_12=filter(row -> 11<=row.educ==12, df_data_working)
-    df_data_working_educ_13_15=filter(row -> 13 <= row.educ <= 15,  df_data_working)
-    df_data_working_educ_16_plus=filter(row -> row.educ>=16,  df_data_working)
-
-    transite_00_data, transite_01_data =L_estimate(df_for_calib,0) ##people in this data seem to always work or always not work
-    transite_10_data, transite_11_data =L_estimate(df_for_calib,1)
-    Transition_Matrix=[transite_00_data/(transite_00_data +transite_01_data) transite_01_data/(transite_00_data +transite_01_data); transite_10_data/(transite_10_data+transite_11_data) transite_11_data/(transite_10_data+transite_11_data)]
-
-
     for m=1:M
-        sim_data=DataFrames.DataFrame(sim_data_all[:,:,m], :auto)
+        sim_data=DataFrames.DataFrame(sim_data_all[:,:,m], :auto) #take out one simulation's data
         sim_data=rename!(sim_data,[:id,:age,:lfp,:x,:wage,:educ])
         sim_data_educ_under_12=filter(row -> row.educ<=11, sim_data)
         sim_data_educ_12=filter(row -> row.educ==12, sim_data)
-        sim_data_educ_13_15=filter(row -> row.educ<=15, sim_data)
+        sim_data_educ_13_15=filter(row -> 13<=row.educ<=15,sim_data)
         sim_data_educ_16_plus=filter(row -> row.educ>=16, sim_data)
-        sim_data_working=filter(row -> row.lfp==1, sim_data)
         sim_data_exp_10_or_less=filter(row -> row.x<=10, sim_data)
         sim_data_exp_11_to_20=filter(row -> 11<=row.x<=20, sim_data)
         sim_data_exp_21_plus=filter(row -> row.x >= 21, sim_data)
-        sim_data_working_educ_under_12=filter(row -> row.educ<=12, sim_data_working)
-        sim_data_working_educ_12=filter(row -> 11<=row.educ==12, sim_data_working)
+
+        sim_data_working=filter(row -> row.lfp==1, sim_data)
+        sim_data_working_educ_under_12=filter(row -> row.educ<=11, sim_data_working)
+        sim_data_working_educ_12=filter(row -> row.educ==12, sim_data_working)
         sim_data_working_educ_13_15=filter(row -> 13 <= row.educ <= 15,  sim_data_working)
         sim_data_working_educ_16_plus=filter(row -> row.educ>=16,  sim_data_working)
 
         participation_by_age=working_by_age(df_for_calib)
         sim_participation_by_age=working_by_age(sim_data)
 
-        working_by_educ_diff[1,m]=mean(df_for_calib.lfp)-mean(sim_data.lfp)
+        working_by_educ_diff[1,m]=mean(df_for_calib.lfp)-mean(sim_data.lfp) #for each simulation compare results and store
         working_by_educ_diff[2,m]=mean(df_data_educ_under_12.lfp)-mean(sim_data_educ_under_12.lfp)
         working_by_educ_diff[3,m]=mean(df_data_educ_12.lfp)-mean(sim_data_educ_12.lfp)
         working_by_educ_diff[4,m]=mean(df_data_educ_13_15.lfp)- mean(sim_data_educ_13_15.lfp)
@@ -258,8 +276,8 @@ function get_moments_difference()
 
         working_by_age_diff[:,m]=participation_by_age.-sim_participation_by_age
 
-        working_by_experience_diff[:,m]=[mean(df_data_exp_10_or_less.lfp)-mean(sim_data_exp_10_or_less.lfp) mean(df_data_exp_11_to_20.lfp)- mean(sim_data_exp_11_to_20.lfp) mean(df_data_exp_21_plus.lfp)- mean(sim_data_exp_21_plus.lfp)
-        ]
+        working_by_experience_diff[:,m]=[mean(df_data_exp_10_or_less.lfp)-mean(sim_data_exp_10_or_less.lfp) mean(df_data_exp_11_to_20.lfp)-
+        mean(sim_data_exp_11_to_20.lfp) mean(df_data_exp_21_plus.lfp)- mean(sim_data_exp_21_plus.lfp)]
 
         wages_by_educ_diff[1,m]=mean(df_data_working.wage)-mean(sim_data_working.wage)
         wages_by_educ_diff[2,m]=mean(df_data_working_educ_under_12.wage)-mean(sim_data_working_educ_under_12.wage)
@@ -273,11 +291,12 @@ function get_moments_difference()
 
         transite_00_sim, transite_01_sim =L_estimate(sim_data,0) ##people in this data seem to always work or always not work
         transite_10_sim, transite_11_sim =L_estimate(sim_data,1)
-        Transition_Matrix_sim=[transite_00_sim/(transite_00_sim +transite_01_sim) transite_01_sim/(transite_00_sim +transite_01_sim); transite_10_sim/(transite_10_sim+transite_11_sim) transite_11_sim/(transite_10_sim+transite_11_sim)]
+        Transition_Matrix_sim=[transite_00_sim/(transite_00_sim +transite_01_sim) transite_01_sim/(transite_00_sim +transite_01_sim);
+        transite_10_sim/(transite_10_sim+transite_11_sim) transite_11_sim/(transite_10_sim+transite_11_sim)]
 
         transition_diff[:,:,m]=Transition_Matrix.-Transition_Matrix_sim
     end
-        working_by_educ_diff_mean=mean(working_by_educ_diff,dims=2)
+        working_by_educ_diff_mean=mean(working_by_educ_diff,dims=2) #average over the second dimension, which is M
         working_by_age_diff_mean=mean(working_by_age_diff,dims=2)
         working_by_experience_diff_mean=mean(working_by_experience_diff,dims=2)
         wages_by_educ_diff_mean=mean(wages_by_educ_diff,dims=2)
@@ -286,10 +305,6 @@ function get_moments_difference()
 
         return -working_by_educ_diff_mean, -working_by_age_diff_mean, -working_by_experience_diff_mean, -wages_by_educ_diff_mean, -wages_by_age_diff_mean, -transition_diff_mean
 end
-
-@elapsed m1,m2,m3,m4,m5,m6 =get_moments_difference()
-@show m1,m2,m3,m4,m5,m6
-
 
 
 
