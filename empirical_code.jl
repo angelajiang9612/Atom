@@ -188,7 +188,7 @@ end
 ################Simulation part#############
 
 N=1506
-M=1 ##S is number of simulations
+M=1 ##M is number of simulations
 #set initial parameters
 ##sigma eta is randomly set (=rho), b is randomly set, the rest is using results from Wholpin paper
 α_1=-14500
