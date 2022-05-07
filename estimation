@@ -1,0 +1,40 @@
+
+
+function log_likelihood(beta)
+    α_1=beta[1]
+    α_2=beta[2]
+    α_3=beta[3]
+    α_4=beta[4]
+    b=beta[5]
+    β_1=beta[6]
+    β_2=beta[7]
+    β_3=beta[8]
+    β_4=beta[9]
+    σ_ϵ=beta[10]
+    σ_η=beta[11]
+    σ_u=sqrt(σ_ϵ^2 +σ_η^2)
+    ρ=σ_ϵ/σ_u
+    Random.seed!(1234);
+    ϵ_matrix = reshape(rand(Normal(0, σ_ϵ), N*T_data), N,T_data)
+    ϵ_star_matrix= cutoffs_analytical(ϵ_matrix, beta)
+    log_L=0
+    for i=1:N, t=1:T_data
+        println("this is", i, "person", t, "period")
+        row=Matrix(filter(row -> row.id ==i && row.age==44+t, df)) #select i's info in time t. e.g.if T_data is 10, ag =44+10=54, which is the last period in data
+        l=row[3] #actual labor participation
+        k=row[4] #experience
+        s=row[6]
+        w=row[5]
+        ϵ_star=ϵ_star_matrix[i,k+1,t] #+1 for indice this is the cutoff
+        if l ==1
+            u=log(w)-(β_1 + β_2*k + β_3*k^2 + β_4*s)
+            p_work=(1-cdf.(Normal(),(ϵ_star-u*ρ^2)/(σ_ϵ*sqrt(1-ρ^2))))*(1/σ_u)*pdf.(Normal(),u/σ_u)
+            log_L = log_L + log(p_work)    
+        elseif l ==0
+            p_not_work=cdf.(Normal(), ϵ_star/σ_ϵ)
+            log_L = log_L + log(p_not_work)
+        end
+    end
+    return -log_L #more negative the better
+end
+
