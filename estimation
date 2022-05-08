@@ -1,24 +1,22 @@
 
 
-function log_likelihood(beta)
-    α_1=beta[1]
-    α_2=beta[2]
-    α_3=beta[3]
-    α_4=beta[4]
-    b=beta[5]
-    β_1=beta[6]
-    β_2=beta[7]
-    β_3=beta[8]
-    β_4=beta[9]
-    σ_ϵ=beta[10]
-    σ_η=beta[11]
-    σ_u=sqrt(σ_ϵ^2 +σ_η^2)
+function log_likelihood(x)
+    α_1=x[1]
+    α_2=x[2]
+    α_3=x[3]
+    α_4=x[4]
+    b=x[5]
+    β_1=x[6]
+    β_2=x[7]
+    β_3=x[8]
+    β_4=x[9]
+    σ_ϵ=x[10]
+    σ_η=x[11]
+    σ_u=sqrt(σ_ϵ^2 + σ_η^2)
     ρ=σ_ϵ/σ_u
-    Random.seed!(1234);
-    ϵ_matrix = reshape(rand(Normal(0, σ_ϵ), N*T_data), N,T_data)
-    ϵ_star_matrix= cutoffs_analytical(ϵ_matrix, beta)
+    ϵ_star_matrix= cutoffs_analytical(ϵ_matrix, x)
     log_L=0
-    for i=1:N, t=1:T_data
+    for i=1:N, t=2:T_data
         println("this is", i, "person", t, "period")
         row=Matrix(filter(row -> row.id ==i && row.age==44+t, df)) #select i's info in time t. e.g.if T_data is 10, ag =44+10=54, which is the last period in data
         l=row[3] #actual labor participation
@@ -37,4 +35,3 @@ function log_likelihood(beta)
     end
     return -log_L #more negative the better
 end
-
