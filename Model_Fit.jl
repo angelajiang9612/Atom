@@ -26,20 +26,20 @@ T_data=10 ##data periods
 δ=0.95
 
 N=1506
-M=20
+M=1
 
 
-α_1=-12981.635893926774
-α_2=-0.015829101321218772 #this cannot be less than -1 because we will get domain error
-α_3=75.79111278268003
-α_4=316.5851697876777
-b=15493.73040633815
+α_1=-28303.087033848984
+α_2=-0.01577765757995542 #this cannot be less than -1 because we will get domain error
+α_3=75.96125783144883
+α_4=321.6788131624045
+b=0 
 
-β_1=9.350534160468246
-β_2=0.018628092856856588 #this term should also be small because wages doesnt change much with age, which means probably won't change much with experience
-β_3=-0.00033146797764284445
-β_4=0.041052978799600896 #this term should be small because wage doesn't change much as education changes
-σ_ξ=0.6013350258587833
+β_1=9.356030083632515
+β_2=0.01872851003458384 #this term should also be small because wages doesnt change much with age, which means probably won't change much with experience
+β_3=-0.00033413094514064156
+β_4=0.04055307409199501 #this term should be small because wage doesn't change much as education changes
+σ_ξ=0.6013402505000555
 
 
 ##Functions Used
@@ -301,8 +301,54 @@ end
 
 ##calibration purpose calculate moment difference
 
+@elapsed m11,m22,m33,m44,m55,m66 =get_moments_difference()
+@show m11,m22,m33,m44,m55,m66
+
 @elapsed m1,m2,m3,m4,m5,m6 =get_moments_difference()
 @show m1,m2,m3,m4,m5,m6
+
+
+
+
+#from data 
+Working_Average=mean(filter(row -> row.age<=54, df).lfp) #overall working around 59% of the time
+Working_Average_under_12=mean(filter(row -> row.age<=54 && row.educ<=11, df).lfp) #overall working around 59% of the time
+Working_Average_12=mean(filter(row -> row.age<=54 && row.educ==12, df).lfp) #overall working around 59% of the time
+Working_Average_13_15=mean(filter(row -> row.age<=54 && 13<=row.educ<=15, df).lfp)
+Working_Average_16_plus=mean(filter(row -> row.age<=54 && row.educ>=16, df).lfp)
+
+
+Wages_average=mean(df_data_working.wage)
+Wage_Average_educ_under_12=mean(df_data_working_educ_under_12.wage) #overall working around 59% of the time
+Wage_Average_educ_12=mean(df_data_working_educ_12.wage) #overall working around 59% of the time
+Wage_Average_educ_13_15=mean(df_data_working_educ_13_15.wage)
+Wage_Average_educ_16_plus=mean(df_data_working_educ_16_plus.wage)
+
+df_data= filter(row -> row.age<=54, df)
+
+df_data_exp_10_or_less=filter(row -> row.age<=54  && row.x<=10, df)
+df_data_exp_11_to_20=filter(row -> row.age<=54  && 11<=row.x<=20, df)
+df_data_exp_21_plus=filter(row ->  row.age<=54 && row.x >= 21, df)
+
+Working_exp_10_or_less=mean(df_data_exp_10_or_less.lfp)
+Working_exp_11_to_20=mean(df_data_exp_11_to_20.lfp)
+Working_exp_21_plus=mean(df_data_exp_21_plus.lfp)
+
+
+df_data_working=filter(row -> row.lfp==1, df_data)
+df_data_working_educ_under_12=filter(row -> row.educ<=12, df_data_working)
+df_data_working_educ_12=filter(row -> 11<=row.educ==12, df_data_working)
+df_data_working_educ_13_15=filter(row -> 13 <= row.educ <= 15,  df_data_working)
+df_data_working_educ_16_plus=filter(row -> row.educ>=16,  df_data_working)
+
+wages_age=wages_by_age(df_data_working)
+
+transite_00_data, transite_01_data =L_estimate(df,0) ##people in this data seem to always work or always not work
+transite_10_data, transite_11_data =L_estimate(df,1)
+
+Transition_Matrix=[transite_00_data/(transite_00_data +transite_01_data) transite_01_data/(transite_00_data +transite_01_data); 
+transite_10_data/(transite_10_data+transite_11_data) transite_11_data/(transite_10_data+transite_11_data)]
+
 
 
 ##backing out model means. 
@@ -335,3 +381,13 @@ Wages_by_Educ__Model[5]==Wage_Average_educ_16_plus + m4[5]
 
 wages_age_model=wages_age.+m5
 Transition_Matrix_model = Transition_Matrix .+ m6
+
+
+m1
+@show Working_by_Educ_Model
+Working_by_Age_Model
+Working_by_Exp_Model
+Wages_by_Educ__Model
+Wages_by_Age
+Transition_Matrix_model
+
